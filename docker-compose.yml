@@ -1,0 +1,9 @@
+version: '3.4'      
+  
+services:
+  caching:
+    image: redisuniversity/ru101-lab
+    container_name: redis-course
+    ports:
+      - '6379:6379'
+      - '8888:8888'
