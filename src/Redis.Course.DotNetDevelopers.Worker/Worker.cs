@@ -22,17 +22,25 @@ namespace Redis.Course.DotNetDevelopers.Worker
 
                 // un-pipelined ~380ms
                 // implicitly Pipelined ~5ms
+                // explicit pipelining with IBatch ~5ms
 
-                // If we run out async tasks to StackExchange.Redis concurrently, the library
-                // will automatically manage pipelining of these commands to Redis, making
-                // them significantly more performant as we remove most of the round trips to Redis.
                 var pingTasks = new List<Task<TimeSpan>>();
+
+                // Batches allow you to more intentionally group together the commands that you want to send to Redis.
+                // If you employee a batch, all commands in the batch will be sent to Redis in one contiguous block, with no
+                // other commands from the client interleaved. Of course, if there are other clients to Redis, commands from those
+                // other clients may be interleaved with your batched commands.
+                var batch = db.CreateBatch();
+
+                // restart stopwatch
+                stopwatch.Restart();
 
                 for (var i = 0; i < 1000; i++)
                 {
-                    pingTasks.Add(db.PingAsync());
+                    pingTasks.Add(batch.PingAsync());
                 }
 
+                batch.Execute();
                 await Task.WhenAll(pingTasks);
 
                 logger.LogInformation("1000 automatically pipelined tasks took: {elapsedMs}ms to execute, first result: {result}",
