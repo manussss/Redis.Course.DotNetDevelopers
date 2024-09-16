@@ -1,5 +1,4 @@
 using StackExchange.Redis;
-using System.Diagnostics;
 
 namespace Redis.Course.DotNetDevelopers.Worker
 {
@@ -18,34 +17,55 @@ namespace Redis.Course.DotNetDevelopers.Worker
 
                 var db = muxer.GetDatabase();
 
-                var stopwatch = Stopwatch.StartNew();
+                //set and get strings
+                var instructorNameKey = new RedisKey("instructors:1:name");
 
-                // un-pipelined ~380ms
-                // implicitly Pipelined ~5ms
-                // explicit pipelining with IBatch ~5ms
+                db.StringSet(instructorNameKey, "Steve");
+                var instructor1Name = db.StringGet(instructorNameKey);
 
-                var pingTasks = new List<Task<TimeSpan>>();
+                logger.LogInformation("Instructor 1's name is: {name}", instructor1Name);
 
-                // Batches allow you to more intentionally group together the commands that you want to send to Redis.
-                // If you employee a batch, all commands in the batch will be sent to Redis in one contiguous block, with no
-                // other commands from the client interleaved. Of course, if there are other clients to Redis, commands from those
-                // other clients may be interleaved with your batched commands.
-                var batch = db.CreateBatch();
+                db.StringAppend(instructorNameKey, " Lorello");
+                instructor1Name = db.StringGet(instructorNameKey);
+                logger.LogInformation("Instructor 1's full name is: {name}", instructor1Name);
 
-                // restart stopwatch
-                stopwatch.Restart();
+                //string numerics
+                var tempKey = "temperature";
+                db.StringSet(tempKey, 42);
+                var tempAsLong = db.StringIncrement(tempKey, 5);
+                logger.LogInformation("New temperature: {tempAsLong}", tempAsLong);
 
-                for (var i = 0; i < 1000; i++)
-                {
-                    pingTasks.Add(batch.PingAsync());
-                }
+                tempAsLong = db.StringIncrement(tempKey);
+                logger.LogInformation("New temperature: {tempAsLong}", tempAsLong);
 
-                batch.Execute();
-                await Task.WhenAll(pingTasks);
+                var tempAsDouble = db.StringIncrement(tempKey, .5);
+                logger.LogInformation("New temperature: {tempAsDouble}", tempAsDouble);
 
-                logger.LogInformation("1000 automatically pipelined tasks took: {elapsedMs}ms to execute, first result: {result}",
-                    stopwatch.ElapsedMilliseconds,
-                    pingTasks[0].Result);
+                //expiration
+                db.StringSet("temporaryKey", "hello world", expiry: TimeSpan.FromSeconds(1));
+                var getTempKey = db.StringGet("temporaryKey");
+                logger.LogInformation("Temporary key: {value}", getTempKey);
+
+                await Task.Delay(1000, stoppingToken);
+
+                getTempKey = db.StringGet("temporaryKey");
+                logger.LogInformation("Temporary key after expire: {value}", getTempKey);
+
+                var conditionalKey = "ConditionalKey";
+                var conditionalKeyText = "this has been set";
+                // You can also specify a condition for when you want to set a key
+                // For example, if you only want to set a key when it does not exist
+                // you can by specifying the NotExists condition
+                var wasSet = db.StringSet(conditionalKey, conditionalKeyText, when: When.NotExists);
+                logger.LogInformation("Key set: {wasSet}", wasSet);
+                // Of course, after the key has been set, if you try to set the key again
+                // it will not work, and you will get false back from StringSet
+                wasSet = db.StringSet(conditionalKey, "this text doesn't matter since it won't be set", when: When.NotExists);
+                logger.LogInformation("Key set: {wasSet}", wasSet);
+
+                // You can also use When.Exists, to set the key only if the key already exists
+                wasSet = db.StringSet(conditionalKey, "we reset the key!");
+                logger.LogInformation("Key set: {wasSet}", wasSet);
 
                 await Task.Delay(1000, stoppingToken);
             }
