@@ -1,4 +1,5 @@
 using StackExchange.Redis;
+using System.Diagnostics;
 
 namespace Redis.Course.DotNetDevelopers.Worker
 {
@@ -17,7 +18,16 @@ namespace Redis.Course.DotNetDevelopers.Worker
 
                 var db = muxer.GetDatabase();
 
-                logger.LogInformation("ping: {ping}", (await db.PingAsync()).TotalMilliseconds);
+                var stopwatch = Stopwatch.StartNew();
+
+                // un-pipelined commands incur the added cost of an extra round trip
+                //result: ~380ms
+                for (var i = 0; i < 1000; i++)
+                {
+                    await db.PingAsync();
+                }
+
+                logger.LogInformation("1000 un-pipelined commands took: {elapsedMs}ms to execute", stopwatch.ElapsedMilliseconds);
 
                 await Task.Delay(1000, stoppingToken);
             }
