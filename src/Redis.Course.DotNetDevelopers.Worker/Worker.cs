@@ -20,14 +20,24 @@ namespace Redis.Course.DotNetDevelopers.Worker
 
                 var stopwatch = Stopwatch.StartNew();
 
-                // un-pipelined commands incur the added cost of an extra round trip
-                //result: ~380ms
+                // un-pipelined ~380ms
+                // implicitly Pipelined ~5ms
+
+                // If we run out async tasks to StackExchange.Redis concurrently, the library
+                // will automatically manage pipelining of these commands to Redis, making
+                // them significantly more performant as we remove most of the round trips to Redis.
+                var pingTasks = new List<Task<TimeSpan>>();
+
                 for (var i = 0; i < 1000; i++)
                 {
-                    await db.PingAsync();
+                    pingTasks.Add(db.PingAsync());
                 }
 
-                logger.LogInformation("1000 un-pipelined commands took: {elapsedMs}ms to execute", stopwatch.ElapsedMilliseconds);
+                await Task.WhenAll(pingTasks);
+
+                logger.LogInformation("1000 automatically pipelined tasks took: {elapsedMs}ms to execute, first result: {result}",
+                    stopwatch.ElapsedMilliseconds,
+                    pingTasks[0].Result);
 
                 await Task.Delay(1000, stoppingToken);
             }
