@@ -17,55 +17,39 @@ namespace Redis.Course.DotNetDevelopers.Worker
 
                 var db = muxer.GetDatabase();
 
-                //set and get strings
-                var instructorNameKey = new RedisKey("instructors:1:name");
+                //lists
+                var fruitKey = "fruits";
+                var vegetableKey = "vegetables";
+                db.KeyDelete([fruitKey, vegetableKey]);
 
-                db.StringSet(instructorNameKey, "Steve");
-                var instructor1Name = db.StringGet(instructorNameKey);
+                //push to the left
+                db.ListLeftPush(fruitKey, ["Banana", "Mango", "Apple", "Pepper", "Kiwi", "Grape"]);
 
-                logger.LogInformation("Instructor 1's name is: {name}", instructor1Name);
+                logger.LogInformation("The first fruit in the list is: {fruit}", db.ListGetByIndex(fruitKey, 0));
+                logger.LogInformation("The last fruit in the list is: {fruit}", db.ListGetByIndex(fruitKey, -1));
 
-                db.StringAppend(instructorNameKey, " Lorello");
-                instructor1Name = db.StringGet(instructorNameKey);
-                logger.LogInformation("Instructor 1's full name is: {name}", instructor1Name);
+                //push to the right
+                db.ListRightPush(vegetableKey, ["Potato", "Carrot", "Asparagus", "Beet", "Garlic", "Tomato"]);
+                logger.LogInformation("The first veg in the list is: {fruit}", db.ListGetByIndex(vegetableKey, 0));
 
-                //string numerics
-                var tempKey = "temperature";
-                db.StringSet(tempKey, 42);
-                var tempAsLong = db.StringIncrement(tempKey, 5);
-                logger.LogInformation("New temperature: {tempAsLong}", tempAsLong);
+                //enumerate a list
+                logger.LogInformation("Fruit indexes 0 to -1: {fruits}", string.Join(", ", db.ListRange(fruitKey)));
+                logger.LogInformation("Vegetables index 0 to -2: {vegs}", string.Join(", ", db.ListRange(vegetableKey, 0, -2)));
 
-                tempAsLong = db.StringIncrement(tempKey);
-                logger.LogInformation("New temperature: {tempAsLong}", tempAsLong);
+                //list as queue
+                logger.LogInformation("Enqueuing Celery");
+                db.ListLeftPush(vegetableKey, "Celery");
+                logger.LogInformation("Dequeued: {veg}", db.ListRightPop(vegetableKey));
 
-                var tempAsDouble = db.StringIncrement(tempKey, .5);
-                logger.LogInformation("New temperature: {tempAsDouble}", tempAsDouble);
+                //list as stack
+                logger.LogInformation("Pushing Grapefruit");
+                db.ListLeftPush(fruitKey, "Grapefruit");
 
-                //expiration
-                db.StringSet("temporaryKey", "hello world", expiry: TimeSpan.FromSeconds(1));
-                var getTempKey = db.StringGet("temporaryKey");
-                logger.LogInformation("Temporary key: {value}", getTempKey);
+                //searching lists
+                logger.LogInformation("Position of Mango: {mango}", db.ListPosition(fruitKey, "Mango"));
 
-                await Task.Delay(1000, stoppingToken);
-
-                getTempKey = db.StringGet("temporaryKey");
-                logger.LogInformation("Temporary key after expire: {value}", getTempKey);
-
-                var conditionalKey = "ConditionalKey";
-                var conditionalKeyText = "this has been set";
-                // You can also specify a condition for when you want to set a key
-                // For example, if you only want to set a key when it does not exist
-                // you can by specifying the NotExists condition
-                var wasSet = db.StringSet(conditionalKey, conditionalKeyText, when: When.NotExists);
-                logger.LogInformation("Key set: {wasSet}", wasSet);
-                // Of course, after the key has been set, if you try to set the key again
-                // it will not work, and you will get false back from StringSet
-                wasSet = db.StringSet(conditionalKey, "this text doesn't matter since it won't be set", when: When.NotExists);
-                logger.LogInformation("Key set: {wasSet}", wasSet);
-
-                // You can also use When.Exists, to set the key only if the key already exists
-                wasSet = db.StringSet(conditionalKey, "we reset the key!");
-                logger.LogInformation("Key set: {wasSet}", wasSet);
+                //lists size
+                logger.LogInformation("There are {len} fruits in our Fruit List", db.ListLength(fruitKey));
 
                 await Task.Delay(1000, stoppingToken);
             }
