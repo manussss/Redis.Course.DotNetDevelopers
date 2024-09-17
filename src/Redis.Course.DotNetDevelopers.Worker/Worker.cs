@@ -6,50 +6,38 @@ namespace Redis.Course.DotNetDevelopers.Worker
     {
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
+            var options = new ConfigurationOptions
+            {
+                EndPoints = { configuration.GetConnectionString("Redis")! }
+            };
+
+            var muxer = await ConnectionMultiplexer.ConnectAsync(options);
+
+            var db = muxer.GetDatabase();
+
             while (!stoppingToken.IsCancellationRequested)
             {
-                var options = new ConfigurationOptions
-                {
-                    EndPoints = { configuration.GetConnectionString("Redis")! }
-                };
+                //sets
+                var allUsersSet = "users";
+                var activeUsersSet = "users:state:active";
+                var inactiveUsersSet = "users:state:inactive";
+                var offlineUsersSet = "users:state:offline";
+                db.KeyDelete([allUsersSet, activeUsersSet, inactiveUsersSet, offlineUsersSet]);
 
-                var muxer = await ConnectionMultiplexer.ConnectAsync(options);
+                db.SetAdd(activeUsersSet, ["User:1", "User:2"]);
+                db.SetAdd(inactiveUsersSet, ["User:3", "User:4"]);
+                db.SetAdd(offlineUsersSet, ["User:5", "User:6", "User:7"]);
 
-                var db = muxer.GetDatabase();
+                db.SetCombineAndStore(SetOperation.Union, allUsersSet, [activeUsersSet, inactiveUsersSet, offlineUsersSet]);
 
-                //lists
-                var fruitKey = "fruits";
-                var vegetableKey = "vegetables";
-                db.KeyDelete([fruitKey, vegetableKey]);
+                var user6Offline = db.SetContains(offlineUsersSet, "User:6");
+                logger.LogInformation("User:6 offline: {user6Offline}", user6Offline);
+                logger.LogInformation("All Users In one shot: {usersSet}", string.Join(", ", db.SetMembers(allUsersSet)));
+                logger.LogInformation("All Users with scan  : {usersSet}", string.Join(", ", db.SetScan(allUsersSet)));
 
-                //push to the left
-                db.ListLeftPush(fruitKey, ["Banana", "Mango", "Apple", "Pepper", "Kiwi", "Grape"]);
-
-                logger.LogInformation("The first fruit in the list is: {fruit}", db.ListGetByIndex(fruitKey, 0));
-                logger.LogInformation("The last fruit in the list is: {fruit}", db.ListGetByIndex(fruitKey, -1));
-
-                //push to the right
-                db.ListRightPush(vegetableKey, ["Potato", "Carrot", "Asparagus", "Beet", "Garlic", "Tomato"]);
-                logger.LogInformation("The first veg in the list is: {fruit}", db.ListGetByIndex(vegetableKey, 0));
-
-                //enumerate a list
-                logger.LogInformation("Fruit indexes 0 to -1: {fruits}", string.Join(", ", db.ListRange(fruitKey)));
-                logger.LogInformation("Vegetables index 0 to -2: {vegs}", string.Join(", ", db.ListRange(vegetableKey, 0, -2)));
-
-                //list as queue
-                logger.LogInformation("Enqueuing Celery");
-                db.ListLeftPush(vegetableKey, "Celery");
-                logger.LogInformation("Dequeued: {veg}", db.ListRightPop(vegetableKey));
-
-                //list as stack
-                logger.LogInformation("Pushing Grapefruit");
-                db.ListLeftPush(fruitKey, "Grapefruit");
-
-                //searching lists
-                logger.LogInformation("Position of Mango: {mango}", db.ListPosition(fruitKey, "Mango"));
-
-                //lists size
-                logger.LogInformation("There are {len} fruits in our Fruit List", db.ListLength(fruitKey));
+                logger.LogInformation("Moving User:1 from active to offline");
+                var moved = db.SetMove(activeUsersSet, offlineUsersSet, "User:1");
+                logger.LogInformation("Move Successful: {moved}", moved);
 
                 await Task.Delay(1000, stoppingToken);
             }
